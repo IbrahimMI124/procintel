@@ -37,9 +37,10 @@ func TestFileDescriptorsNormalProcess(t *testing.T) {
 }
 
 // The Snapshot seam: the same list, reached through the assembled value, with
-// the section availability set. A socket descriptor carries only its inode —
-// the join into Snapshot.Sockets belongs to the socket observer (AD-15), so
-// this block must leave that list alone.
+// the section availability set. The fd/socket join itself — what
+// Snapshot.Sockets contains for this same fixture — is Block 1c's territory
+// and is covered in net_test.go; this test only pins that FileDescriptors
+// stays exactly what this block classifies.
 func TestSnapshotPopulatesFilesSection(t *testing.T) {
 	snapshot, err := New(fixtureRoot("normal")).Snapshot(1234)
 	if err != nil {
@@ -50,13 +51,6 @@ func TestSnapshotPopulatesFilesSection(t *testing.T) {
 	}
 	if !reflect.DeepEqual(snapshot.FileDescriptors, wantNormalDescriptors) {
 		t.Errorf("FileDescriptors =\n%+v\nwant\n%+v", snapshot.FileDescriptors, wantNormalDescriptors)
-	}
-	if snapshot.Sockets != nil {
-		t.Errorf("Sockets = %+v, want nil — the fd/socket join is not this block's (AD-15)", snapshot.Sockets)
-	}
-	if snapshot.Availability.Sockets.Valid() {
-		t.Errorf("Availability.Sockets = %q, want the zero value for a section this build does not read",
-			snapshot.Availability.Sockets)
 	}
 }
 

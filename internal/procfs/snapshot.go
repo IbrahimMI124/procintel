@@ -9,10 +9,10 @@ import (
 
 // Snapshot observes one process and returns it as a model.Snapshot.
 //
-// This block populates the identity, resources, files and kernel sections.
-// The sockets, children and security sections are left at their zero
+// This block populates the identity, resources, files, sockets and kernel
+// sections. The children and security sections are left at their zero
 // Availability — which model.Availability.Valid reports as invalid, and which
-// therefore can never be mistaken for observed — until Blocks 1b to 1e fill
+// therefore can never be mistaken for observed — until Blocks 1d and 1e fill
 // them. Saying "absent" or "unsupported" for a section this build simply does
 // not look at would be a false claim about the kernel (AD-4).
 //
@@ -41,6 +41,7 @@ func (r *Reader) Snapshot(pid int) (model.Snapshot, error) {
 	counters, ioStatus := r.io(pid)
 	score, oomStatus := r.oomScore(pid)
 	descriptors, filesStatus := r.fileDescriptors(pid)
+	sockets, netStatus := r.sockets(pid, descriptors)
 
 	// Identity. comm is the kernel's own short name and the most direct
 	// source; stat's field 2 carries the same string, so it serves when the
@@ -92,9 +93,19 @@ func (r *Reader) Snapshot(pid int) (model.Snapshot, error) {
 	// Files. The section's Availability describes the fd/ directory read
 	// itself: denied under hidepid or on another user's process, raced when
 	// the PID went away, absent when the directory is there and empty. A
-	// socket descriptor carries only its inode; Snapshot.Sockets stays
-	// unpopulated until the observer that owns the join lands (AD-15).
+	// socket descriptor carries only its inode; the join into Sockets below
+	// is the only place a connection is ever assembled (AD-15).
 	snapshot.FileDescriptors = descriptors
+
+	// Sockets. The join happens exactly once, here, over Block 1b's
+	// already-classified descriptors (AD-15). The section can never read
+	// observed unless the fd side of the join (Files) also reached at least
+	// the state needed to see every socket-kind descriptor, so the section's
+	// Availability folds in filesStatus alongside each /proc/net/* file's
+	// own read outcome, via the same weakest precedence every other section
+	// uses.
+	socketsAvailability := weakest(filesStatus, netStatus)
+	snapshot.Sockets = sockets
 
 	// Kernel. CurrentSyscall stays at -1: /proc/<pid>/syscall is P2 and
 	// this block does not read it, so the field means "not observed here"
@@ -106,6 +117,7 @@ func (r *Reader) Snapshot(pid int) (model.Snapshot, error) {
 		Identity:  identity,
 		Resources: resources,
 		Files:     filesStatus,
+		Sockets:   socketsAvailability,
 		Kernel:    kernel,
 	}
 	return snapshot, nil

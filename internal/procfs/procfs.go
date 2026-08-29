@@ -76,6 +76,20 @@ func entry(pid int, name string) string {
 	return filepath.Join(strconv.Itoa(pid), name)
 }
 
+// netDirectory is the root-level directory /proc/net/* lives under. Unlike
+// every other interface this package reads, the five files the socket
+// observer parses are global, not per-process.
+const netDirectory = "net"
+
+// netEntry builds the root-relative path of one /proc/net/* file.
+//
+// name is always one of the package's own net-file constants, never
+// caller-supplied text, so this carries the same no-escape guarantee as
+// entry.
+func netEntry(name string) string {
+	return filepath.Join(netDirectory, name)
+}
+
 // read returns the bytes of one per-process interface, paired with the
 // availability that describes how the read went (AD-4).
 //
@@ -166,6 +180,48 @@ func (r *Reader) readdir(pid int, name string) ([]string, model.Availability) {
 		numeric = append(numeric, candidate)
 	}
 	return numeric, model.AvailabilityObserved
+}
+
+// readNet returns the bytes of one global /proc/net/* file, paired with the
+// availability of that read.
+//
+// This is the root-level sibling of read: a /proc/net/* file has no owning
+// PID, so there is nothing to re-check on failure and raced can never apply
+// here — classifyNetError, not classify, decides the outcome.
+func (r *Reader) readNet(name string) ([]byte, model.Availability) {
+	root, err := os.OpenRoot(r.root)
+	if err != nil {
+		return nil, classifyNetError(err)
+	}
+	defer root.Close()
+
+	data, err := root.ReadFile(netEntry(name))
+	if err != nil {
+		return nil, classifyNetError(err)
+	}
+	return data, model.AvailabilityObserved
+}
+
+// classifyNetError maps a failed read of a global /proc/net/* file to one
+// Availability.
+//
+// It is deliberately its own small rule rather than a reuse of classify (which
+// needs a PID to re-check) or classifyRootError (which exists for the
+// distinct case of the root itself failing to open): permission denied maps
+// to denied, a missing file (e.g. tcp6 with IPv6 disabled) maps to
+// unsupported — the kernel simply does not offer this interface — and
+// anything else maps to absent.
+func classifyNetError(err error) model.Availability {
+	switch {
+	case err == nil:
+		return model.AvailabilityObserved
+	case errors.Is(err, fs.ErrPermission):
+		return model.AvailabilityDenied
+	case errors.Is(err, fs.ErrNotExist):
+		return model.AvailabilityUnsupported
+	default:
+		return model.AvailabilityAbsent
+	}
 }
 
 // isDecimalFDName reports whether name is composed entirely of one or more
