@@ -9,12 +9,12 @@ import (
 
 // Snapshot observes one process and returns it as a model.Snapshot.
 //
-// This block populates the identity, resources, files, sockets and kernel
-// sections. The children and security sections are left at their zero
-// Availability — which model.Availability.Valid reports as invalid, and which
-// therefore can never be mistaken for observed — until Blocks 1d and 1e fill
-// them. Saying "absent" or "unsupported" for a section this build simply does
-// not look at would be a false claim about the kernel (AD-4).
+// This block populates the identity, resources, files, sockets, children and
+// kernel sections. The security section is left at its zero Availability —
+// which model.Availability.Valid reports as invalid, and which therefore can
+// never be mistaken for observed — until Block 1e fills it. Saying "absent"
+// or "unsupported" for a section this build simply does not look at would be
+// a false claim about the kernel (AD-4).
 //
 // The only error this method returns is ErrProcessNotFound. Every other
 // failure to see something is carried as an Availability on the section it
@@ -42,6 +42,7 @@ func (r *Reader) Snapshot(pid int) (model.Snapshot, error) {
 	score, oomStatus := r.oomScore(pid)
 	descriptors, filesStatus := r.fileDescriptors(pid)
 	sockets, netStatus := r.sockets(pid, descriptors)
+	ancestors, descendants, childrenStatus := r.lineage(pid, statFields, statStatus)
 
 	// Identity. comm is the kernel's own short name and the most direct
 	// source; stat's field 2 carries the same string, so it serves when the
@@ -107,6 +108,15 @@ func (r *Reader) Snapshot(pid int) (model.Snapshot, error) {
 	socketsAvailability := weakest(filesStatus, netStatus)
 	snapshot.Sockets = sockets
 
+	// Children. One lineage observer produces both halves: ancestors walked
+	// nearest-first to PID 1, descendants as a flat depth-tagged list from a
+	// single proc-root scan (AD-16). The section folds the target stat, the
+	// ancestor walk and the proc-root listing through the same weakest
+	// precedence; a single unreadable unrelated process is dropped from the
+	// tree without lowering it (Design Notes).
+	snapshot.Ancestors = ancestors
+	snapshot.Descendants = descendants
+
 	// Kernel. CurrentSyscall stays at -1: /proc/<pid>/syscall is P2 and
 	// this block does not read it, so the field means "not observed here"
 	// rather than "not in a syscall".
@@ -118,6 +128,7 @@ func (r *Reader) Snapshot(pid int) (model.Snapshot, error) {
 		Resources: resources,
 		Files:     filesStatus,
 		Sockets:   socketsAvailability,
+		Children:  childrenStatus,
 		Kernel:    kernel,
 	}
 	return snapshot, nil

@@ -202,6 +202,43 @@ func (r *Reader) readNet(name string) ([]byte, model.Availability) {
 	return data, model.AvailabilityObserved
 }
 
+// readProcRoot lists the numerically named process directories directly under
+// the proc root, paired with the availability of that listing.
+//
+// It is the root-level sibling of readdir: the proc root is global, so there
+// is no owning PID to re-check on failure and raced can never apply here —
+// classifyRootError (the root failing to open) or classifyNetError (a
+// post-open failure), never classify, decides the outcome. Only kernel-shaped
+// names — one or more ASCII digits — are kept, so entries like net/, self and
+// acpi/ are skipped exactly as readdir skips a stray file under fd/.
+func (r *Reader) readProcRoot() ([]string, model.Availability) {
+	root, err := os.OpenRoot(r.root)
+	if err != nil {
+		return nil, classifyRootError(err)
+	}
+	defer root.Close()
+
+	directory, err := root.Open(".")
+	if err != nil {
+		return nil, classifyNetError(err)
+	}
+	defer directory.Close()
+
+	entries, err := directory.Readdirnames(-1)
+	if err != nil {
+		return nil, classifyNetError(err)
+	}
+
+	numeric := make([]string, 0, len(entries))
+	for _, candidate := range entries {
+		if !isDecimalFDName(candidate) {
+			continue
+		}
+		numeric = append(numeric, candidate)
+	}
+	return numeric, model.AvailabilityObserved
+}
+
 // classifyNetError maps a failed read of a global /proc/net/* file to one
 // Availability.
 //

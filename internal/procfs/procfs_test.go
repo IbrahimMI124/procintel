@@ -140,6 +140,7 @@ func TestSnapshotNormalProcess(t *testing.T) {
 	}{
 		{"identity", snapshot.Availability.Identity},
 		{"resources", snapshot.Availability.Resources},
+		{"children", snapshot.Availability.Children},
 		{"kernel", snapshot.Availability.Kernel},
 	} {
 		if section.got != model.AvailabilityObserved {
@@ -161,9 +162,9 @@ func TestSnapshotLeavesUnpopulatedSectionsInvalid(t *testing.T) {
 		name string
 		got  model.Availability
 	}{
-		// files moved to the populated set with Block 1b, and sockets with
-		// Block 1c; their coverage lives in fd_test.go and net_test.go.
-		{"children", snapshot.Availability.Children},
+		// files moved to the populated set with Block 1b, sockets with
+		// Block 1c, and children with Block 1d; their coverage lives in
+		// fd_test.go, net_test.go and lineage_test.go.
 		{"security", snapshot.Availability.Security},
 	}
 	for _, section := range unpopulated {
