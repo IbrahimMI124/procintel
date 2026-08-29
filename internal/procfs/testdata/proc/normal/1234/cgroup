@@ -1,0 +1,3 @@
+12:pids:/system.slice/app.service
+4:cpu,cpuacct:/system.slice/app.service
+0::/system.slice/app.service

@@ -66,7 +66,18 @@ const (
 	interfaceRoot     = "root"
 	interfaceFD       = "fd"
 	interfaceFDInfo   = "fdinfo"
+	interfaceNS       = "ns"
+	interfaceCgroup   = "cgroup"
+	// interfaceAttrCurrent is the LSM label node. It carries a "/" so entry
+	// resolves it with filepath.Join; os.Root rejects an escape regardless.
+	interfaceAttrCurrent = "attr/current"
 )
+
+// namespaceKinds is the fixed, alphabetically ordered set of /proc/<pid>/ns/
+// entries the security observer reads. It is never a directory listing, so
+// Snapshot.Security.Namespaces stays deterministic without a sort (AD-6). A
+// kind the running kernel does not provide is simply absent from the result.
+var namespaceKinds = []string{"cgroup", "ipc", "mnt", "net", "pid", "time", "user", "uts"}
 
 // entry builds the root-relative path of one per-process interface.
 //

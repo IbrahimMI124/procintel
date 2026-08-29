@@ -1,0 +1,11 @@
+Name:	confined
+State:	S (sleeping)
+Tgid:	6001
+Pid:	6001
+PPid:	1
+Uid:	1000	0	0	1000
+Gid:	1000	0	0	1000
+Threads:	1
+CapEff:	000001ffffffffff
+NoNewPrivs:	1
+Seccomp:	2

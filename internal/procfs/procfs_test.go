@@ -141,6 +141,7 @@ func TestSnapshotNormalProcess(t *testing.T) {
 		{"identity", snapshot.Availability.Identity},
 		{"resources", snapshot.Availability.Resources},
 		{"children", snapshot.Availability.Children},
+		{"security", snapshot.Availability.Security},
 		{"kernel", snapshot.Availability.Kernel},
 	} {
 		if section.got != model.AvailabilityObserved {
@@ -149,33 +150,12 @@ func TestSnapshotNormalProcess(t *testing.T) {
 	}
 }
 
-// Sections no observer in this block populates must stay at the zero value,
-// which Valid rejects — so nothing downstream can read them as observed.
-func TestSnapshotLeavesUnpopulatedSectionsInvalid(t *testing.T) {
-	reader := New(fixtureRoot("normal"))
-	snapshot, err := reader.Snapshot(1234)
-	if err != nil {
-		t.Fatalf("Snapshot(1234) returned error: %v", err)
-	}
-
-	unpopulated := []struct {
-		name string
-		got  model.Availability
-	}{
-		// files moved to the populated set with Block 1b, sockets with
-		// Block 1c, and children with Block 1d; their coverage lives in
-		// fd_test.go, net_test.go and lineage_test.go.
-		{"security", snapshot.Availability.Security},
-	}
-	for _, section := range unpopulated {
-		if section.got != "" {
-			t.Errorf("%s availability = %q, want the zero value", section.name, section.got)
-		}
-		if section.got.Valid() {
-			t.Errorf("%s availability %q reports Valid; an unobserved section must not", section.name, section.got)
-		}
-	}
-}
+// Every section this adapter can populate is now populated: files landed with
+// Block 1b, sockets with 1c, children with 1d and security with 1e. The former
+// TestSnapshotLeavesUnpopulatedSectionsInvalid guarded the last unpopulated
+// section (security); with none left, its per-branch coverage lives in the
+// per-observer suites (fd_test.go, net_test.go, lineage_test.go,
+// security_test.go).
 
 // --- Matrix row: PID absent -----------------------------------------------
 

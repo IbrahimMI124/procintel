@@ -1,0 +1,3 @@
+12:pids:/system.slice/confined.service
+4:cpu,cpuacct:/system.slice/confined.service
+1:name=systemd:/system.slice/confined.service
