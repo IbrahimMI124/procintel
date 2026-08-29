@@ -161,7 +161,8 @@ func TestSnapshotLeavesUnpopulatedSectionsInvalid(t *testing.T) {
 		name string
 		got  model.Availability
 	}{
-		{"files", snapshot.Availability.Files},
+		// files moved to the populated set with Block 1b; its coverage
+		// lives in fd_test.go.
 		{"sockets", snapshot.Availability.Sockets},
 		{"children", snapshot.Availability.Children},
 		{"security", snapshot.Availability.Security},

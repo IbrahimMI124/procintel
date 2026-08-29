@@ -64,6 +64,8 @@ const (
 	interfaceExe      = "exe"
 	interfaceCwd      = "cwd"
 	interfaceRoot     = "root"
+	interfaceFD       = "fd"
+	interfaceFDInfo   = "fdinfo"
 )
 
 // entry builds the root-relative path of one per-process interface.
@@ -120,6 +122,70 @@ func (r *Reader) readlink(pid int, name string) (string, model.Availability) {
 		return "", model.AvailabilityAbsent
 	}
 	return target, model.AvailabilityObserved
+}
+
+// readdir lists the numerically named entries of one per-process directory
+// interface, paired with the availability of the directory read itself.
+//
+// The kernel names every entry of fd/ and fdinfo/ with a descriptor number,
+// so a name that is not a decimal integer did not come from the kernel — a
+// stray file in a fixture tree, or a future entry this parser does not know.
+// Skipping it here keeps that judgement in one place instead of in each
+// caller's loop. The names are returned in the order the directory yielded
+// them; ordering the values they resolve to is the caller's job (AD-6).
+//
+// An empty directory is reported as observed: whether "no entries" means
+// absent is a per-interface judgement, and each parser makes it, exactly as
+// with an empty file body in read.
+func (r *Reader) readdir(pid int, name string) ([]string, model.Availability) {
+	root, err := os.OpenRoot(r.root)
+	if err != nil {
+		return nil, classifyRootError(err)
+	}
+	defer root.Close()
+
+	directory, err := root.Open(entry(pid, name))
+	if err != nil {
+		// A per-process directory interface missing under a live PID is
+		// classified the same way read classifies a missing regular
+		// interface file: the kernel does not offer it.
+		return nil, classify(root, pid, err, model.AvailabilityUnsupported)
+	}
+	defer directory.Close()
+
+	entries, err := directory.Readdirnames(-1)
+	if err != nil {
+		return nil, classify(root, pid, err, model.AvailabilityUnsupported)
+	}
+
+	numeric := make([]string, 0, len(entries))
+	for _, candidate := range entries {
+		if !isDecimalFDName(candidate) {
+			continue
+		}
+		numeric = append(numeric, candidate)
+	}
+	return numeric, model.AvailabilityObserved
+}
+
+// isDecimalFDName reports whether name is composed entirely of one or more
+// ASCII digits — the only shape the kernel writes for an fd or fdinfo entry
+// name.
+//
+// strconv.Atoi alone is not a sufficient filter: it also accepts signed
+// forms like "-1" or "+5", which readdir never yields on a live kernel, so a
+// candidate must be checked here before it is treated as trustworthy input
+// to Atoi.
+func isDecimalFDName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		if name[i] < '0' || name[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // exists reports whether the PID directory is present under the root.

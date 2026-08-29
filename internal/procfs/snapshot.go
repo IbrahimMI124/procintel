@@ -9,8 +9,8 @@ import (
 
 // Snapshot observes one process and returns it as a model.Snapshot.
 //
-// This block populates the identity, resources and kernel sections. The
-// files, sockets, children and security sections are left at their zero
+// This block populates the identity, resources, files and kernel sections.
+// The sockets, children and security sections are left at their zero
 // Availability — which model.Availability.Valid reports as invalid, and which
 // therefore can never be mistaken for observed — until Blocks 1b to 1e fill
 // them. Saying "absent" or "unsupported" for a section this build simply does
@@ -40,6 +40,7 @@ func (r *Reader) Snapshot(pid int) (model.Snapshot, error) {
 	resolved := r.links(pid)
 	counters, ioStatus := r.io(pid)
 	score, oomStatus := r.oomScore(pid)
+	descriptors, filesStatus := r.fileDescriptors(pid)
 
 	// Identity. comm is the kernel's own short name and the most direct
 	// source; stat's field 2 carries the same string, so it serves when the
@@ -88,6 +89,13 @@ func (r *Reader) Snapshot(pid int) (model.Snapshot, error) {
 	snapshot.ReadBytes = counters.ReadBytes
 	snapshot.WriteBytes = counters.WriteBytes
 
+	// Files. The section's Availability describes the fd/ directory read
+	// itself: denied under hidepid or on another user's process, raced when
+	// the PID went away, absent when the directory is there and empty. A
+	// socket descriptor carries only its inode; Snapshot.Sockets stays
+	// unpopulated until the observer that owns the join lands (AD-15).
+	snapshot.FileDescriptors = descriptors
+
 	// Kernel. CurrentSyscall stays at -1: /proc/<pid>/syscall is P2 and
 	// this block does not read it, so the field means "not observed here"
 	// rather than "not in a syscall".
@@ -97,6 +105,7 @@ func (r *Reader) Snapshot(pid int) (model.Snapshot, error) {
 	snapshot.Availability = model.SectionAvailability{
 		Identity:  identity,
 		Resources: resources,
+		Files:     filesStatus,
 		Kernel:    kernel,
 	}
 	return snapshot, nil
