@@ -1,0 +1,5 @@
+Name:	worker
+State:	Z (zombie)
+Pid:	2222
+PPid:	1
+Threads:	1
