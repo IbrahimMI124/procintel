@@ -1,0 +1,133 @@
+# procintel — the one build command, recorded once.
+#
+# Go is used from PATH when available, and otherwise from the pinned
+# toolchain, so a judge with go 1.26 on PATH needs no setup at all. Because
+# PATH is preferred, the build first checks that whatever it found is new
+# enough, rather than letting an older toolchain fail with a bare
+# "go.mod requires go >= 1.26".
+GO ?= $(shell command -v go 2>/dev/null || echo $(HOME)/sdk/go1.26.7/bin/go)
+GOFMT ?= $(dir $(GO))gofmt
+BINARY := procintel
+DEPS_PROOF := deps-proof.txt
+
+# The language version go.mod declares, and the toolchain this project was
+# built and tested against.
+GO_REQUIRED_VERSION := 1.26
+PINNED_GO := $(HOME)/sdk/go1.26.7/bin/go
+
+# CGO is off everywhere, not only in the build: the USER_HZ = 100 constant is
+# hardcoded precisely because sysconf(_SC_CLK_TCK) needs cgo, so tests and
+# vet must not run under a different setting than the artifact does.
+export CGO_ENABLED=0
+
+.PHONY: all build test vet fmt check-go proof deps-proof clean
+
+all: build
+
+## check-go: fail early, and legibly, on a toolchain older than the pin.
+check-go:
+	@command -v $(GO) >/dev/null 2>&1 || { \
+		echo "FAIL: no Go toolchain found."; \
+		echo "      procintel needs Go $(GO_REQUIRED_VERSION) or newer."; \
+		echo "      Install it, or set GO=/path/to/go (pinned: $(PINNED_GO))."; \
+		exit 1; }
+	@version=$$($(GO) env GOVERSION 2>/dev/null | sed 's/^go//'); \
+	major=$${version%%.*}; rest=$${version#*.}; minor=$${rest%%.*}; \
+	major=$${major%%[!0-9]*}; minor=$${minor%%[!0-9]*}; \
+	if [ -z "$$major" ] || [ -z "$$minor" ]; then \
+		echo "FAIL: cannot read a version from $(GO) (got '$$version')."; \
+		echo "      Build with the pinned toolchain: make build GO=$(PINNED_GO)"; \
+		exit 1; \
+	fi; \
+	if [ "$$major" -lt 1 ] || { [ "$$major" -eq 1 ] && [ "$$minor" -lt 26 ]; }; then \
+		echo "FAIL: $(GO) is go$$version, but go.mod requires go >= $(GO_REQUIRED_VERSION)."; \
+		echo "      Upgrade, or use the toolchain this project is pinned to:"; \
+		echo "          make $(MAKECMDGOALS) GO=$(PINNED_GO)"; \
+		exit 1; \
+	fi
+
+## build: the single command that produces the runnable artifact.
+build: check-go
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags="-s -w -buildid=" -o $(BINARY) ./cmd/procintel
+
+## test: the whole suite, including the AD-2 import-graph enforcer.
+##
+## -count=1 defeats the test cache, so `make test` always actually runs.
+## -race is deliberately absent: it requires cgo, which contradicts the
+## CGO_ENABLED=0 posture above. Race testing is Block 7's job.
+test: check-go
+	$(GO) test -count=1 ./...
+
+## vet: the toolchain's own static checks.
+vet: check-go
+	$(GO) vet ./...
+
+## fmt: fail if gofmt would change anything.
+fmt:
+	@offenders=$$($(GOFMT) -l .); \
+	if [ -n "$$offenders" ]; then \
+		echo "FAIL: gofmt would rewrite these files:"; \
+		echo "$$offenders" | sed 's/^/    /'; \
+		echo "      Run: $(GOFMT) -w ."; \
+		exit 1; \
+	fi; \
+	echo 'gofmt: clean'
+
+## proof: the zero-dependency evidence, in one place, for the judges.
+##
+## `go mod graph` is not literally empty on Go 1.21+: the toolchain always
+## emits two synthetic nodes for the language and toolchain versions
+## (`go@1.26`, `toolchain@go1.26`). Neither is a dependency — nothing is
+## downloaded, nothing is vendored, and there is no go.sum. The target prints
+## the raw output, then the same graph with those two pseudo-nodes filtered
+## out, which is empty, and fails if it ever is not.
+## The file checks come first: a stray go.work breaks the go command itself,
+## and an opaque "no modules were found in the current workspace" is a much
+## worse answer than naming the file.
+proof: check-go
+	@echo '--- go.sum, go.work and vendor/ (must not exist) ---'
+	@status=0; \
+	for path in go.sum go.work go.work.sum vendor; do \
+		if [ -e "$$path" ]; then \
+			echo "FAIL: $$path exists; a zero-dependency module has none"; \
+			status=1; \
+		else \
+			echo "$$path: absent"; \
+		fi; \
+	done; \
+	exit $$status
+	@echo '--- go.mod (no require block) ---'
+	@cat go.mod
+	@echo '--- go list -m all (the module list: this module and nothing else) ---'
+	@$(GO) list -m all
+	@echo '--- go mod graph (raw) ---'
+	@$(GO) mod graph
+	@echo '--- go mod graph, less the go/toolchain pseudo-nodes (must be empty) ---'
+	@$(GO) mod graph | grep -v -E '(^| )(go|toolchain)@' && \
+		{ echo 'FAIL: a real module dependency appeared above'; exit 1; } || true
+
+## deps-proof: capture the zero-dependency evidence into deps-proof.txt, which
+## the submission requirements name as a required repository file.
+##
+## This is a committed deliverable, not build output, so `clean` leaves it
+## alone. Regenerate and commit it whenever go.mod or the toolchain changes.
+## If `proof` fails, the half-written file is removed rather than left behind
+## as misleading evidence.
+deps-proof: check-go
+	@{ \
+		echo 'procintel — zero-dependency proof'; \
+		echo; \
+		echo "Generated by 'make deps-proof' at $$(date -u +'%Y-%m-%dT%H:%M:%SZ')"; \
+		echo "Toolchain:   $$($(GO) env GOVERSION) $$($(GO) env GOOS)/$$($(GO) env GOARCH)"; \
+		echo "Module:      $$($(GO) list -m)"; \
+		echo; \
+		echo 'Reproduce with: make deps-proof'; \
+		echo; \
+	} > $(DEPS_PROOF)
+	@$(MAKE) --no-print-directory proof >> $(DEPS_PROOF) \
+		|| { rm -f $(DEPS_PROOF); echo 'FAIL: proof failed; $(DEPS_PROOF) not written'; exit 1; }
+	@echo 'wrote $(DEPS_PROOF):'
+	@sed 's/^/    /' $(DEPS_PROOF)
+
+clean:
+	rm -f $(BINARY)

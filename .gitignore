@@ -1,0 +1,29 @@
+# The built artifact. Produced by `make build`, never committed.
+/procintel
+
+# Nothing here may exist in a zero-dependency module; ignoring them makes an
+# accidental `go work init` or `go test -c` impossible to commit by mistake.
+/go.work
+/go.work.sum
+/vendor/
+
+# Test and coverage output.
+*.test
+coverage.out
+
+# BMAD tooling and its planning artifacts. These drive the build; they are not
+# part of the submitted product. DESIGN.md, README.md and STDLIB.md are Block 8
+# deliverables and live at the repository root, not under _bmad-output/.
+/_bmad/
+/_bmad-output/
+/.claude/
+
+# The hackathon rules document — an input to the project, not part of it.
+/hackathon.md
+
+# Editor and OS noise.
+/.vscode/
+/.idea/
+*.swp
+*~
+.DS_Store

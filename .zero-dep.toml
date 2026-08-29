@@ -1,0 +1,3 @@
+# Zero Dependency Hackathon submission manifest.
+track = "A"
+pitch = "Give me a process, and explain what it is doing — a Linux process intelligence CLI that replaces ps, lsof, ss and pstree with the Go standard library alone."
