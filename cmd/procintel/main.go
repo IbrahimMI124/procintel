@@ -14,6 +14,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -32,6 +33,7 @@ import (
 // is kept verbatim from the block that introduced it.
 const usageLine = "usage: procintel inspect <pid> [--json] [--verbose] [--no-color] [--root <path>]\n" +
 	"       procintel list [--json] [--verbose] [--no-color] [--root <path>]\n" +
+	"       procintel snapshot <pid> [-o <path>] [--verbose] [--root <path>]\n" +
 	"       procintel tree <pid> [--verbose] [--no-color] [--root <path>]\n" +
 	"       procintel files <pid> [--verbose] [--no-color] [--root <path>]\n" +
 	"       procintel network <pid> [--verbose] [--no-color] [--root <path>]\n" +
@@ -65,6 +67,8 @@ func run(args []string, stdout, stderr io.Writer, colorDefault bool) int {
 		return runInspect(args[1:], stdout, stderr, colorDefault)
 	case "list":
 		return runList(args[1:], stdout, stderr, colorDefault)
+	case "snapshot":
+		return runSnapshot(args[1:], stdout, stderr)
 	case "tree":
 		return runView(args[1:], stdout, stderr, colorDefault, "tree", render.TreeText)
 	case "files":
@@ -155,6 +159,92 @@ func runInspect(args []string, stdout, stderr io.Writer, colorDefault bool) int 
 	if werr != nil {
 		fmt.Fprintf(stderr, "inspect: %v\n", werr)
 		return 1
+	}
+	return 0
+}
+
+// runSnapshot owns the snapshot flag set and the procfs → render.JSONSnapshot
+// pipeline. It serialises the raw model.Snapshot procfs produced — no
+// explain.Explain, no model.Report (AD-7), no colour (a raw snapshot has no
+// text form, AD-12) — to stdout, or, only when -o names a path, to that file
+// (AD-8). It returns 0 on success (including a fully degraded snapshot,
+// AD-4), 2 iff the PID does not exist, and 1 for any usage/flag error or any
+// render or file-write error.
+func runSnapshot(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("snapshot", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	out := fs.String("o", "", "write the snapshot to this file instead of stdout")
+	verbose := fs.Bool("verbose", false, "write diagnostics to stderr")
+	root := fs.String("root", "/proc", "procfs root to resolve reads under")
+
+	// The pid is the sole positional argument and leads the subcommand;
+	// stdlib flag stops at the first non-flag token, so the pid is peeled off
+	// here and only the flags are handed to Parse.
+	var pidArg string
+	flagArgs := args
+	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
+		pidArg = args[0]
+		flagArgs = args[1:]
+	}
+
+	if err := fs.Parse(flagArgs); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			fmt.Fprintln(stdout, usageLine)
+			return 0
+		}
+		return 1
+	}
+
+	if pidArg == "" || fs.NArg() != 0 {
+		fmt.Fprintln(stderr, usageLine)
+		return 1
+	}
+	pid, err := strconv.Atoi(pidArg)
+	if err != nil || pid <= 0 {
+		fmt.Fprintln(stderr, usageLine)
+		return 1
+	}
+
+	reader := procfs.New(*root)
+
+	if *verbose {
+		fmt.Fprintf(stderr, "root: %s\n", reader.Root())
+		fmt.Fprintf(stderr, "pid: %d\n", pid)
+	}
+
+	snapshot, err := reader.Snapshot(pid)
+	if err != nil {
+		if errors.Is(err, procfs.ErrProcessNotFound) {
+			fmt.Fprintf(stderr, "snapshot: pid %d not found under %s\n", pid, reader.Root())
+			return 2
+		}
+		fmt.Fprintf(stderr, "snapshot: %v\n", err)
+		return 1
+	}
+
+	// Render once into a buffer so the stdout and -o paths share one
+	// serialisation and the file write is a single os.WriteFile call — no
+	// partially written file on a mid-stream encoder error.
+	var buf bytes.Buffer
+	if err := render.JSONSnapshot(&buf, snapshot); err != nil {
+		fmt.Fprintf(stderr, "snapshot: %v\n", err)
+		return 1
+	}
+
+	if *out == "" {
+		if _, err := stdout.Write(buf.Bytes()); err != nil {
+			fmt.Fprintf(stderr, "snapshot: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
+	if err := os.WriteFile(*out, buf.Bytes(), 0o644); err != nil {
+		fmt.Fprintf(stderr, "snapshot: %v\n", err)
+		return 1
+	}
+	if *verbose {
+		fmt.Fprintf(stderr, "wrote %s\n", *out)
 	}
 	return 0
 }

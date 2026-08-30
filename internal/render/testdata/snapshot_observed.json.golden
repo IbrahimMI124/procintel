@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-08-30T12:34:56Z",
+  "pid": 7312,
+  "ppid": 1401,
+  "comm": "update",
+  "command_line": [
+    "/tmp/update",
+    "--quiet"
+  ],
+  "exe": "/tmp/update",
+  "cwd": "/tmp",
+  "root": "/",
+  "state": "S",
+  "start_time": 980412,
+  "utime": 1234,
+  "stime": 567,
+  "resident_bytes": 54525952,
+  "virtual_bytes": 325058560,
+  "thread_count": 4,
+  "priority": 20,
+  "nice": 0,
+  "read_bytes": 90112,
+  "write_bytes": 4096,
+  "file_descriptors": [
+    {
+      "fd": 0,
+      "kind": "character_device",
+      "target": "/dev/pts/2",
+      "socket_inode": 0,
+      "deleted": false
+    },
+    {
+      "fd": 3,
+      "kind": "file",
+      "target": "/etc/passwd",
+      "socket_inode": 0,
+      "deleted": false
+    },
+    {
+      "fd": 4,
+      "kind": "socket",
+      "target": "socket:[884213]",
+      "socket_inode": 884213,
+      "deleted": false
+    },
+    {
+      "fd": 5,
+      "kind": "file",
+      "target": "/tmp/payload",
+      "socket_inode": 0,
+      "deleted": true
+    }
+  ],
+  "sockets": [
+    {
+      "protocol": "tcp",
+      "local_address": "10.0.0.4",
+      "local_port": 51422,
+      "remote_address": "185.10.20.30",
+      "remote_port": 443,
+      "state": "ESTABLISHED",
+      "path": "",
+      "inode": 884213,
+      "fd": 4
+    },
+    {
+      "protocol": "unix",
+      "local_address": "",
+      "local_port": 0,
+      "remote_address": "",
+      "remote_port": 0,
+      "state": "LISTEN",
+      "path": "/run/example.sock",
+      "inode": 884990,
+      "fd": 6
+    }
+  ],
+  "ancestors": [
+    {
+      "pid": 1401,
+      "ppid": 1,
+      "comm": "nginx",
+      "exe": "/usr/sbin/nginx",
+      "start_time": 4120,
+      "depth": 0
+    },
+    {
+      "pid": 1,
+      "ppid": 0,
+      "comm": "systemd",
+      "exe": "/usr/lib/systemd/systemd",
+      "start_time": 12,
+      "depth": 0
+    }
+  ],
+  "descendants": [
+    {
+      "pid": 7401,
+      "ppid": 7312,
+      "comm": "sh",
+      "exe": "/bin/sh",
+      "start_time": 980500,
+      "depth": 1
+    }
+  ],
+  "security": {
+    "uid": 0,
+    "effective_uid": 0,
+    "gid": 0,
+    "effective_gid": 0,
+    "capability_effective": "000001ffffffffff",
+    "no_new_privileges": false,
+    "seccomp_mode": 0,
+    "namespaces": [
+      {
+        "kind": "mnt",
+        "identifier": "mnt:[4026531840]"
+      },
+      {
+        "kind": "net",
+        "identifier": "net:[4026531992]"
+      }
+    ],
+    "cgroup_path": "/system.slice/nginx.service",
+    "security_label": "unconfined"
+  },
+  "oom_score": 17,
+  "current_syscall": -1,
+  "availability": {
+    "identity": "observed",
+    "resources": "observed",
+    "files": "observed",
+    "sockets": "observed",
+    "children": "observed",
+    "security": "observed",
+    "kernel": "observed"
+  }
+}

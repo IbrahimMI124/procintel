@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -15,6 +17,7 @@ import (
 //go:embed testdata/inspect.json.golden
 //go:embed testdata/list.txt.golden
 //go:embed testdata/list.json.golden
+//go:embed testdata/snapshot.json.golden
 //go:embed testdata/tree.txt.golden
 //go:embed testdata/files.txt.golden
 //go:embed testdata/network.txt.golden
@@ -372,6 +375,201 @@ func TestListNoColorOverridesDefault(t *testing.T) {
 	}
 }
 
+// --- snapshot: happy stdout -----------------------------------------
+
+func TestSnapshotHappyStdout(t *testing.T) {
+	code, stdout, stderr := invoke([]string{"snapshot", "1234", "--root", fixtureRoot}, false)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if stderr != "" {
+		t.Errorf("stderr not empty: %q", stderr)
+	}
+	if strings.Contains(stdout, "\x1b[") {
+		t.Error("snapshot output carries an ANSI escape")
+	}
+	if !strings.HasSuffix(stdout, "\n") || strings.HasSuffix(stdout, "\n\n") {
+		t.Errorf("snapshot output does not end with exactly one newline")
+	}
+
+	var snap model.Snapshot
+	if err := json.Unmarshal([]byte(stdout), &snap); err != nil {
+		t.Fatalf("stdout is not one model.Snapshot: %v", err)
+	}
+	if snap.SchemaVersion != model.SchemaVersion {
+		t.Errorf("schema_version = %d, want %d", snap.SchemaVersion, model.SchemaVersion)
+	}
+	if snap.PID != 1234 {
+		t.Errorf("pid = %d, want 1234", snap.PID)
+	}
+
+	scrubbed := scrubTimestamps([]byte(stdout))
+
+	if os.Getenv("GEN_GOLDEN") != "" {
+		if err := os.WriteFile("testdata/snapshot.json.golden", scrubbed, 0o644); err != nil {
+			t.Fatalf("write golden: %v", err)
+		}
+	}
+
+	if !bytes.Equal(scrubbed, golden(t, "snapshot.json.golden")) {
+		t.Errorf("scrubbed JSON mismatch\n--- got ---\n%s", scrubbed)
+	}
+}
+
+// --- snapshot: happy file (-o) --------------------------------------
+
+func TestSnapshotHappyFile(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "s.json")
+	code, stdout, stderr := invoke([]string{"snapshot", "1234", "-o", dst, "--root", fixtureRoot}, false)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if stdout != "" {
+		t.Errorf("stdout not empty when -o was given: %q", stdout)
+	}
+	fi, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("stat written file: %v", err)
+	}
+	if fi.Mode().Perm() != 0o644 {
+		t.Errorf("file mode = %v, want 0o644", fi.Mode().Perm())
+	}
+	data, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("read written file: %v", err)
+	}
+	if !bytes.Equal(scrubTimestamps(data), golden(t, "snapshot.json.golden")) {
+		t.Errorf("written file bytes mismatch\n--- got ---\n%s", data)
+	}
+}
+
+// --- snapshot: a degraded snapshot still serialises, exit 0 --------
+
+func TestSnapshotDegradedSection(t *testing.T) {
+	// Pid 6001's identity/resources/files/sockets/kernel sections read as
+	// unsupported; the snapshot must serialise every per-section availability
+	// and still exit 0 (AD-4).
+	code, stdout, stderr := invoke([]string{"snapshot", "6001", "--root", fixtureRoot}, false)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if stderr != "" {
+		t.Errorf("stderr not empty: %q", stderr)
+	}
+
+	var snap model.Snapshot
+	if err := json.Unmarshal([]byte(stdout), &snap); err != nil {
+		t.Fatalf("stdout is not one model.Snapshot: %v", err)
+	}
+	if snap.Availability.Sockets == model.AvailabilityObserved {
+		t.Errorf("expected a non-observed section availability, got all observed: %+v", snap.Availability)
+	}
+	if snap.Availability.Children != model.AvailabilityObserved {
+		t.Errorf("children availability = %q, want observed", snap.Availability.Children)
+	}
+}
+
+// --- snapshot: pid absent → exit 2 --------------------------------
+
+func TestSnapshotPidAbsent(t *testing.T) {
+	code, stdout, stderr := invoke([]string{"snapshot", "999999", "--root", fixtureRoot}, false)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout not empty on absent pid: %q", stdout)
+	}
+	if !strings.Contains(stderr, "999999") || !strings.Contains(stderr, fixtureRoot) {
+		t.Errorf("stderr does not name the absent pid and root: %q", stderr)
+	}
+}
+
+// --- snapshot: bad / missing pid and unknown flag → exit 1 ----------
+
+func TestSnapshotBadPidAndUnknownFlag(t *testing.T) {
+	for _, args := range [][]string{
+		{"snapshot"},
+		{"snapshot", "abc", "--root", fixtureRoot},
+		{"snapshot", "-3", "--root", fixtureRoot},
+		{"snapshot", "0", "--root", fixtureRoot},
+		{"snapshot", "--bogus", "1234", "--root", fixtureRoot},
+	} {
+		code, stdout, stderr := invoke(args, false)
+		if code != 1 {
+			t.Errorf("%v: exit code = %d, want 1", args, code)
+		}
+		if stdout != "" {
+			t.Errorf("%v: stdout not empty: %q", args, stdout)
+		}
+		if stderr == "" {
+			t.Errorf("%v: no error on stderr", args)
+		}
+	}
+}
+
+// --- snapshot: unwritable -o → exit 1, no file ---------------------
+
+func TestSnapshotUnwritableOutput(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "nonexistent-dir", "s.json")
+	code, stdout, stderr := invoke([]string{"snapshot", "1234", "-o", dst, "--root", fixtureRoot}, false)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout not empty: %q", stdout)
+	}
+	if !strings.HasPrefix(stderr, "snapshot: ") {
+		t.Errorf("stderr missing the snapshot: write error: %q", stderr)
+	}
+	if _, err := os.Stat(dst); !os.IsNotExist(err) {
+		t.Errorf("a file was created at an unwritable path: %v", err)
+	}
+}
+
+// --- snapshot: help goes to stdout --------------------------------
+
+func TestSnapshotHelpGoesToStdout(t *testing.T) {
+	code, stdout, _ := invoke([]string{"snapshot", "-h"}, false)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "usage:") {
+		t.Errorf("help text did not go to stdout: %q", stdout)
+	}
+}
+
+// --- snapshot: verbose ------------------------------------------
+
+func TestSnapshotVerbose(t *testing.T) {
+	// Without -o: stdout unchanged from the non-verbose run, root:/pid: on stderr.
+	_, plainOut, _ := invoke([]string{"snapshot", "1234", "--root", fixtureRoot}, false)
+	code, stdout, stderr := invoke([]string{"snapshot", "1234", "--verbose", "--root", fixtureRoot}, false)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if scrub(stdout) != scrub(plainOut) {
+		t.Error("--verbose changed stdout from the non-verbose run")
+	}
+	if !strings.Contains(stderr, "root: "+fixtureRoot) {
+		t.Errorf("stderr missing resolved-root line: %q", stderr)
+	}
+	if !strings.Contains(stderr, "pid: 1234") {
+		t.Errorf("stderr missing pid line: %q", stderr)
+	}
+	if strings.Contains(stderr, "wrote ") {
+		t.Errorf("wrote line emitted without -o: %q", stderr)
+	}
+
+	// With -o: an extra `wrote <path>` line.
+	dst := filepath.Join(t.TempDir(), "s.json")
+	_, _, stderr = invoke([]string{"snapshot", "1234", "-o", dst, "--verbose", "--root", fixtureRoot}, false)
+	if !strings.Contains(stderr, "wrote "+dst) {
+		t.Errorf("stderr missing the wrote line: %q", stderr)
+	}
+}
+
+func scrub(s string) string { return string(scrubTimestamps([]byte(s))) }
+
 // --- views: happy text, one section per subcommand -------------------
 
 var viewNames = []string{"tree", "files", "network", "security"}
@@ -486,6 +684,7 @@ func TestRunIsDeterministic(t *testing.T) {
 		{"inspect", "1234", "--json", "--root", fixtureRoot},
 		{"list", "--root", fixtureRoot},
 		{"list", "--json", "--root", fixtureRoot},
+		{"snapshot", "1234", "--root", fixtureRoot},
 		{"tree", "1234", "--root", fixtureRoot},
 		{"files", "1234", "--root", fixtureRoot},
 		{"network", "1234", "--root", fixtureRoot},
