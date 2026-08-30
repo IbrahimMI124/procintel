@@ -1,0 +1,5 @@
+PID 7312  update  [S]
+  sockets    observed
+    PROTO  LOCAL                  REMOTE                 STATE
+    tcp    10.0.0.4:51422         185.10.20.30:443       ESTABLISHED
+    unix   /run/example.sock      -                      LISTEN

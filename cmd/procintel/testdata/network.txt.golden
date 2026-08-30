@@ -1,0 +1,4 @@
+PID 1234  python3  [S]
+  sockets    observed
+    PROTO  LOCAL                  REMOTE                 STATE
+    tcp    127.0.0.1:8080         :0                     LISTEN

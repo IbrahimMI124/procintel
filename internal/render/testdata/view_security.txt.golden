@@ -1,0 +1,10 @@
+PID 7312  update  [S]
+  security   observed
+    uid            0  euid 0
+    gid            0  egid 0
+    capabilities   000001ffffffffff
+    no_new_privs   false
+    seccomp        0
+    namespaces     mnt:[4026531840]  net:[4026531992]
+    cgroup         /system.slice/nginx.service
+    label          unconfined

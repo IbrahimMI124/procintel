@@ -1,0 +1,7 @@
+PID 1234  python3  [S]
+  children   observed
+    ancestors      systemd (1)
+    descendants
+      app-worker (5001) depth 1
+      app-worker (5002) depth 1
+      grandchild (5003) depth 2

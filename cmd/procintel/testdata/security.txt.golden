@@ -1,0 +1,10 @@
+PID 1234  python3  [S]
+  security   observed
+    uid            1000  euid 1000
+    gid            1000  egid 1000
+    capabilities   0000000000000000
+    no_new_privs   false
+    seccomp        0
+    namespaces     cgroup:[4026531835]  ipc:[4026531839]  mnt:[4026531840]  net:[4026531992]  pid:[4026531836]  time:[4026531834]  user:[4026531837]  uts:[4026531838]
+    cgroup         /system.slice/app.service
+    label          unconfined

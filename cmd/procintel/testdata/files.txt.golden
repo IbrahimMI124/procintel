@@ -1,0 +1,10 @@
+PID 1234  python3  [S]
+  files      observed
+    FD   TYPE             TARGET
+    0    file             /srv/app/server.py
+    1    pipe             pipe:[123456]
+    2    socket           socket:[654321]
+    3    anon_inode       anon_inode:[eventpoll]
+    4    file             /srv/app/tmp/scratch.log (deleted)
+    5    directory        /srv/app
+    10   file             /var/log/app.log

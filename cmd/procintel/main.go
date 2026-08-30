@@ -31,7 +31,11 @@ import (
 // text. The subcommand surface is `inspect <pid>` and `list`; the inspect line
 // is kept verbatim from the block that introduced it.
 const usageLine = "usage: procintel inspect <pid> [--json] [--verbose] [--no-color] [--root <path>]\n" +
-	"       procintel list [--json] [--verbose] [--no-color] [--root <path>]"
+	"       procintel list [--json] [--verbose] [--no-color] [--root <path>]\n" +
+	"       procintel tree <pid> [--verbose] [--no-color] [--root <path>]\n" +
+	"       procintel files <pid> [--verbose] [--no-color] [--root <path>]\n" +
+	"       procintel network <pid> [--verbose] [--no-color] [--root <path>]\n" +
+	"       procintel security <pid> [--verbose] [--no-color] [--root <path>]"
 
 func main() {
 	color := isCharDevice(os.Stdout) && os.Getenv("NO_COLOR") == ""
@@ -61,6 +65,14 @@ func run(args []string, stdout, stderr io.Writer, colorDefault bool) int {
 		return runInspect(args[1:], stdout, stderr, colorDefault)
 	case "list":
 		return runList(args[1:], stdout, stderr, colorDefault)
+	case "tree":
+		return runView(args[1:], stdout, stderr, colorDefault, "tree", render.TreeText)
+	case "files":
+		return runView(args[1:], stdout, stderr, colorDefault, "files", render.FilesText)
+	case "network":
+		return runView(args[1:], stdout, stderr, colorDefault, "network", render.NetworkText)
+	case "security":
+		return runView(args[1:], stdout, stderr, colorDefault, "security", render.SecurityText)
 	case "-h", "--help":
 		fmt.Fprintln(stdout, usageLine)
 		return 0
@@ -142,6 +154,81 @@ func runInspect(args []string, stdout, stderr io.Writer, colorDefault bool) int 
 	}
 	if werr != nil {
 		fmt.Fprintf(stderr, "inspect: %v\n", werr)
+		return 1
+	}
+	return 0
+}
+
+// runView owns one filtered-view subcommand (tree | files | network |
+// security). It is runInspect without the --json branch: the same
+// pid-peel-before-Parse, the same flag set (--verbose / --no-color / --root),
+// the same procfs.New(root).Snapshot(pid) → explain.Explain pipeline, the
+// same error → exit mapping (2 iff the PID is absent, 1 otherwise) and the
+// same two-stage colour AND. Only the final render call is parametrised:
+// renderFn writes the report's one section for this view. A degraded but
+// observed section renders its header line and exits 0 (AD-4).
+func runView(args []string, stdout, stderr io.Writer, colorDefault bool, name string, renderFn func(io.Writer, model.Report, bool) error) int {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	verbose := fs.Bool("verbose", false, "write diagnostics to stderr")
+	noColor := fs.Bool("no-color", false, "disable ANSI colour")
+	root := fs.String("root", "/proc", "procfs root to resolve reads under")
+
+	// The pid is the sole positional argument and leads the subcommand;
+	// stdlib flag stops at the first non-flag token, so the pid is peeled off
+	// here and only the flags are handed to Parse.
+	var pidArg string
+	flagArgs := args
+	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
+		pidArg = args[0]
+		flagArgs = args[1:]
+	}
+
+	if err := fs.Parse(flagArgs); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			fmt.Fprintln(stdout, usageLine)
+			return 0
+		}
+		return 1
+	}
+
+	if pidArg == "" || fs.NArg() != 0 {
+		fmt.Fprintln(stderr, usageLine)
+		return 1
+	}
+	pid, err := strconv.Atoi(pidArg)
+	if err != nil || pid <= 0 {
+		fmt.Fprintln(stderr, usageLine)
+		return 1
+	}
+
+	reader := procfs.New(*root)
+
+	if *verbose {
+		fmt.Fprintf(stderr, "root: %s\n", reader.Root())
+		fmt.Fprintf(stderr, "pid: %d\n", pid)
+	}
+
+	snapshot, err := reader.Snapshot(pid)
+	if err != nil {
+		if errors.Is(err, procfs.ErrProcessNotFound) {
+			fmt.Fprintf(stderr, "%s: pid %d not found under %s\n", name, pid, reader.Root())
+			return 2
+		}
+		fmt.Fprintf(stderr, "%s: %v\n", name, err)
+		return 1
+	}
+
+	if *verbose {
+		writeNonObservedSections(stderr, snapshot.Availability)
+	}
+
+	report := explain.Explain(snapshot)
+
+	color := colorDefault && !*noColor
+
+	if werr := renderFn(stdout, report, color); werr != nil {
+		fmt.Fprintf(stderr, "%s: %v\n", name, werr)
 		return 1
 	}
 	return 0

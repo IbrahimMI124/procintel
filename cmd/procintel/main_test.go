@@ -15,6 +15,10 @@ import (
 //go:embed testdata/inspect.json.golden
 //go:embed testdata/list.txt.golden
 //go:embed testdata/list.json.golden
+//go:embed testdata/tree.txt.golden
+//go:embed testdata/files.txt.golden
+//go:embed testdata/network.txt.golden
+//go:embed testdata/security.txt.golden
 var goldenFS embed.FS
 
 // fixtureRoot is internal/procfs/testdata/proc/normal reached from this
@@ -368,6 +372,112 @@ func TestListNoColorOverridesDefault(t *testing.T) {
 	}
 }
 
+// --- views: happy text, one section per subcommand -------------------
+
+var viewNames = []string{"tree", "files", "network", "security"}
+
+func TestViewHappyText(t *testing.T) {
+	for _, v := range viewNames {
+		t.Run(v, func(t *testing.T) {
+			code, stdout, stderr := invoke([]string{v, "1234", "--root", fixtureRoot}, false)
+			if code != 0 {
+				t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+			}
+			if stdout != string(golden(t, v+".txt.golden")) {
+				t.Errorf("stdout mismatch\n--- got ---\n%s", stdout)
+			}
+			if stderr != "" {
+				t.Errorf("stderr not empty: %q", stderr)
+			}
+			if strings.Contains(stdout, "\x1b[") {
+				t.Error("non-TTY text output carries an ANSI escape")
+			}
+			if !strings.HasPrefix(stdout, "PID 1234  python3  [S]\n") {
+				t.Errorf("missing the shared header line: %q", stdout)
+			}
+			for _, block := range []string{"FACTS", "SIGNALS", "ASSESSMENT"} {
+				if strings.Contains(stdout, block) {
+					t.Errorf("%s view leaked the %s block", v, block)
+				}
+			}
+		})
+	}
+}
+
+// --- views: a non-observed target section is header-only, exit 0 -----
+
+func TestViewSectionNotObservedExitsZero(t *testing.T) {
+	// Pid 6001's sockets and files sections read as unsupported.
+	for _, tc := range []struct{ view, header string }{
+		{"network", "sockets    unsupported"},
+		{"files", "files      unsupported"},
+	} {
+		code, stdout, stderr := invoke([]string{tc.view, "6001", "--root", fixtureRoot}, false)
+		if code != 0 {
+			t.Errorf("%s: exit code = %d, want 0", tc.view, code)
+		}
+		if !strings.Contains(stdout, tc.header) {
+			t.Errorf("%s: stdout missing %q:\n%s", tc.view, tc.header, stdout)
+		}
+		if strings.Count(strings.TrimRight(stdout, "\n"), "\n") != 1 {
+			t.Errorf("%s: expected header + one section line, got:\n%s", tc.view, stdout)
+		}
+		if stderr != "" {
+			t.Errorf("%s: stderr not empty: %q", tc.view, stderr)
+		}
+	}
+}
+
+// --- views: shared error / help / colour / verbose rows --------------
+
+func TestViewSharedRows(t *testing.T) {
+	for _, v := range viewNames {
+		// PID absent → exit 2, stderr names the pid, stdout empty.
+		code, stdout, stderr := invoke([]string{v, "999999", "--root", fixtureRoot}, false)
+		if code != 2 || stdout != "" || !strings.Contains(stderr, "999999") {
+			t.Errorf("%s absent-pid: code=%d stdout=%q stderr=%q", v, code, stdout, stderr)
+		}
+
+		// Bad / missing pid → exit 1 with a usage line on stderr.
+		for _, args := range [][]string{{v, "abc"}, {v}} {
+			code, stdout, stderr := invoke(args, false)
+			if code != 1 || stdout != "" || !strings.Contains(stderr, "usage:") {
+				t.Errorf("%v: code=%d stdout=%q stderr=%q", args, code, stdout, stderr)
+			}
+		}
+
+		// Unknown flag (including --json) → flag error on stderr, exit 1.
+		code, stdout, stderr = invoke([]string{v, "1234", "--json", "--root", fixtureRoot}, false)
+		if code != 1 || stdout != "" || stderr == "" {
+			t.Errorf("%s --json: code=%d stdout=%q stderr=%q", v, code, stdout, stderr)
+		}
+
+		// -h → usage block to stdout, exit 0.
+		code, stdout, _ = invoke([]string{v, "-h"}, false)
+		if code != 0 || !strings.Contains(stdout, "usage:") {
+			t.Errorf("%s -h: code=%d stdout=%q", v, code, stdout)
+		}
+
+		// --no-color over colorDefault=true → no ANSI, equals plain golden.
+		code, stdout, _ = invoke([]string{v, "1234", "--no-color", "--root", fixtureRoot}, true)
+		if code != 0 || strings.Contains(stdout, "\x1b[") {
+			t.Errorf("%s --no-color: code=%d ansi=%v", v, code, strings.Contains(stdout, "\x1b["))
+		}
+		if stdout != string(golden(t, v+".txt.golden")) {
+			t.Errorf("%s --no-color output should equal the plain golden", v)
+		}
+
+		// --verbose → stdout unchanged, stderr carries root:/pid: lines.
+		code, stdout, stderr = invoke([]string{v, "1234", "--verbose", "--root", fixtureRoot}, false)
+		if code != 0 || stdout != string(golden(t, v+".txt.golden")) {
+			t.Errorf("%s --verbose: code=%d stdout changed", v, code)
+		}
+		if !strings.Contains(stderr, "root: "+fixtureRoot) || !strings.Contains(stderr, "pid: 1234") {
+			t.Errorf("%s --verbose: stderr missing diagnostics: %q", v, stderr)
+		}
+	}
+}
+
 // --- Matrix: determinism -------------------------------------------
 
 func TestRunIsDeterministic(t *testing.T) {
@@ -376,6 +486,10 @@ func TestRunIsDeterministic(t *testing.T) {
 		{"inspect", "1234", "--json", "--root", fixtureRoot},
 		{"list", "--root", fixtureRoot},
 		{"list", "--json", "--root", fixtureRoot},
+		{"tree", "1234", "--root", fixtureRoot},
+		{"files", "1234", "--root", fixtureRoot},
+		{"network", "1234", "--root", fixtureRoot},
+		{"security", "1234", "--root", fixtureRoot},
 	} {
 		c1, o1, e1 := invoke(args, false)
 		c2, o2, e2 := invoke(args, false)

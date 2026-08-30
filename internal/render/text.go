@@ -48,7 +48,20 @@ func Text(w io.Writer, r model.Report, color bool) error {
 
 // writeFacts renders the seven Snapshot sections in SectionAvailability field
 // order. A section that is not observed contributes only its header line.
+//
+// Each section is one named writer so the same section can be rendered on its
+// own by a filtered view (views.go) without duplicating its body.
 func writeFacts(b *strings.Builder, s model.Snapshot, color bool) {
+	writeIdentitySection(b, s, color)
+	writeResourcesSection(b, s, color)
+	writeFilesSection(b, s, color)
+	writeSocketsSection(b, s, color)
+	writeChildrenSection(b, s, color)
+	writeSecuritySection(b, s, color)
+	writeKernelSection(b, s, color)
+}
+
+func writeIdentitySection(b *strings.Builder, s model.Snapshot, color bool) {
 	section(b, "identity", s.Availability.Identity, color, func() {
 		field(b, "pid", fmt.Sprintf("%d", s.PID))
 		field(b, "ppid", fmt.Sprintf("%d", s.PPID))
@@ -60,7 +73,9 @@ func writeFacts(b *strings.Builder, s model.Snapshot, color bool) {
 		field(b, "state", s.State)
 		field(b, "start_time", fmt.Sprintf("%d", s.StartTime))
 	})
+}
 
+func writeResourcesSection(b *strings.Builder, s model.Snapshot, color bool) {
 	section(b, "resources", s.Availability.Resources, color, func() {
 		field(b, "cpu_time", fmt.Sprintf("%s user  %s system",
 			ticksToSeconds(s.UserTime), ticksToSeconds(s.SystemTime)))
@@ -71,7 +86,9 @@ func writeFacts(b *strings.Builder, s model.Snapshot, color bool) {
 		field(b, "io", fmt.Sprintf("%s read  %s written",
 			humanBytes(s.ReadBytes), humanBytes(s.WriteBytes)))
 	})
+}
 
+func writeFilesSection(b *strings.Builder, s model.Snapshot, color bool) {
 	section(b, "files", s.Availability.Files, color, func() {
 		if len(s.FileDescriptors) == 0 {
 			field(b, "", "(none)")
@@ -86,7 +103,9 @@ func writeFacts(b *strings.Builder, s model.Snapshot, color bool) {
 			fmt.Fprintf(b, "    %-4d %-16s %s\n", fd.Number, fd.Kind, target)
 		}
 	})
+}
 
+func writeSocketsSection(b *strings.Builder, s model.Snapshot, color bool) {
 	section(b, "sockets", s.Availability.Sockets, color, func() {
 		if len(s.Sockets) == 0 {
 			field(b, "", "(none)")
@@ -98,7 +117,9 @@ func writeFacts(b *strings.Builder, s model.Snapshot, color bool) {
 				sock.Protocol, socketLocal(sock), socketRemote(sock), sock.State)
 		}
 	})
+}
 
+func writeChildrenSection(b *strings.Builder, s model.Snapshot, color bool) {
 	section(b, "children", s.Availability.Children, color, func() {
 		field(b, "ancestors", refsInline(s.Ancestors))
 		if len(s.Descendants) == 0 {
@@ -110,7 +131,9 @@ func writeFacts(b *strings.Builder, s model.Snapshot, color bool) {
 			fmt.Fprintf(b, "      %s (%d) depth %d\n", ref.Comm, ref.PID, ref.Depth)
 		}
 	})
+}
 
+func writeSecuritySection(b *strings.Builder, s model.Snapshot, color bool) {
 	section(b, "security", s.Availability.Security, color, func() {
 		field(b, "uid", fmt.Sprintf("%d  euid %d", s.Security.UID, s.Security.EffectiveUID))
 		field(b, "gid", fmt.Sprintf("%d  egid %d", s.Security.GID, s.Security.EffectiveGID))
@@ -121,7 +144,9 @@ func writeFacts(b *strings.Builder, s model.Snapshot, color bool) {
 		field(b, "cgroup", s.Security.CgroupPath)
 		field(b, "label", s.Security.SecurityLabel)
 	})
+}
 
+func writeKernelSection(b *strings.Builder, s model.Snapshot, color bool) {
 	section(b, "kernel", s.Availability.Kernel, color, func() {
 		field(b, "oom_score", fmt.Sprintf("%d", s.OOMScore))
 	})

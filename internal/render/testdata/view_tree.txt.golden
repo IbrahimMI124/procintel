@@ -1,0 +1,5 @@
+PID 7312  update  [S]
+  children   observed
+    ancestors      nginx (1401)  systemd (1)
+    descendants
+      sh (7401) depth 1

@@ -1,0 +1,7 @@
+PID 7312  update  [S]
+  files      observed
+    FD   TYPE             TARGET
+    0    character_device /dev/pts/2
+    3    file             /etc/passwd
+    4    socket           socket:[884213]
+    5    file             /tmp/payload (deleted)
