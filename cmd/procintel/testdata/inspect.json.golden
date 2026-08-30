@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "generated_at": "SCRUBBED",
+  "facts": {
+    "schema_version": 1,
+    "captured_at": "SCRUBBED",
+    "pid": 1234,
+    "ppid": 1,
+    "comm": "python3",
+    "command_line": [
+      "/usr/bin/python3",
+      "-u",
+      "/srv/app/server.py"
+    ],
+    "exe": "/usr/bin/python3",
+    "cwd": "/srv/app",
+    "root": "/",
+    "state": "S",
+    "start_time": 987654,
+    "utime": 1234,
+    "stime": 567,
+    "resident_bytes": 8388608,
+    "virtual_bytes": 123456789,
+    "thread_count": 4,
+    "priority": 20,
+    "nice": 0,
+    "read_bytes": 4096000,
+    "write_bytes": 8192000,
+    "file_descriptors": [
+      {
+        "fd": 0,
+        "kind": "file",
+        "target": "/srv/app/server.py",
+        "socket_inode": 0,
+        "deleted": false
+      },
+      {
+        "fd": 1,
+        "kind": "pipe",
+        "target": "pipe:[123456]",
+        "socket_inode": 0,
+        "deleted": false
+      },
+      {
+        "fd": 2,
+        "kind": "socket",
+        "target": "socket:[654321]",
+        "socket_inode": 654321,
+        "deleted": false
+      },
+      {
+        "fd": 3,
+        "kind": "anon_inode",
+        "target": "anon_inode:[eventpoll]",
+        "socket_inode": 0,
+        "deleted": false
+      },
+      {
+        "fd": 4,
+        "kind": "file",
+        "target": "/srv/app/tmp/scratch.log",
+        "socket_inode": 0,
+        "deleted": true
+      },
+      {
+        "fd": 5,
+        "kind": "directory",
+        "target": "/srv/app",
+        "socket_inode": 0,
+        "deleted": false
+      },
+      {
+        "fd": 10,
+        "kind": "file",
+        "target": "/var/log/app.log",
+        "socket_inode": 0,
+        "deleted": false
+      }
+    ],
+    "sockets": [
+      {
+        "protocol": "tcp",
+        "local_address": "127.0.0.1",
+        "local_port": 8080,
+        "remote_address": "",
+        "remote_port": 0,
+        "state": "LISTEN",
+        "path": "",
+        "inode": 654321,
+        "fd": 2
+      }
+    ],
+    "ancestors": [
+      {
+        "pid": 1,
+        "ppid": 0,
+        "comm": "systemd",
+        "exe": "/sbin/init",
+        "start_time": 100,
+        "depth": 0
+      }
+    ],
+    "descendants": [
+      {
+        "pid": 5001,
+        "ppid": 1234,
+        "comm": "app-worker",
+        "exe": "",
+        "start_time": 1000000,
+        "depth": 1
+      },
+      {
+        "pid": 5002,
+        "ppid": 1234,
+        "comm": "app-worker",
+        "exe": "",
+        "start_time": 1000500,
+        "depth": 1
+      },
+      {
+        "pid": 5003,
+        "ppid": 5001,
+        "comm": "grandchild",
+        "exe": "",
+        "start_time": 1001000,
+        "depth": 2
+      }
+    ],
+    "security": {
+      "uid": 1000,
+      "effective_uid": 1000,
+      "gid": 1000,
+      "effective_gid": 1000,
+      "capability_effective": "0000000000000000",
+      "no_new_privileges": false,
+      "seccomp_mode": 0,
+      "namespaces": [
+        {
+          "kind": "cgroup",
+          "identifier": "cgroup:[4026531835]"
+        },
+        {
+          "kind": "ipc",
+          "identifier": "ipc:[4026531839]"
+        },
+        {
+          "kind": "mnt",
+          "identifier": "mnt:[4026531840]"
+        },
+        {
+          "kind": "net",
+          "identifier": "net:[4026531992]"
+        },
+        {
+          "kind": "pid",
+          "identifier": "pid:[4026531836]"
+        },
+        {
+          "kind": "time",
+          "identifier": "time:[4026531834]"
+        },
+        {
+          "kind": "user",
+          "identifier": "user:[4026531837]"
+        },
+        {
+          "kind": "uts",
+          "identifier": "uts:[4026531838]"
+        }
+      ],
+      "cgroup_path": "/system.slice/app.service",
+      "security_label": "unconfined"
+    },
+    "oom_score": 13,
+    "current_syscall": -1,
+    "availability": {
+      "identity": "observed",
+      "resources": "observed",
+      "files": "observed",
+      "sockets": "observed",
+      "children": "observed",
+      "security": "observed",
+      "kernel": "observed"
+    }
+  },
+  "changes": null,
+  "behaviors": null,
+  "signals": null,
+  "assessment": {
+    "summary": "",
+    "severity": "",
+    "score": 0,
+    "confidence": "",
+    "contributing_rule_ids": null
+  }
+}

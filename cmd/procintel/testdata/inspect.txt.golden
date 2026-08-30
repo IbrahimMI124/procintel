@@ -1,0 +1,57 @@
+PID 1234  python3  [S]
+
+FACTS
+
+  identity   observed
+    pid            1234
+    ppid           1
+    comm           python3
+    command        /usr/bin/python3 -u /srv/app/server.py
+    executable     /usr/bin/python3
+    cwd            /srv/app
+    root           /
+    state          S
+    start_time     987654
+  resources  observed
+    cpu_time       12.340s user  5.670s system
+    memory         8.0 MiB resident  117.7 MiB virtual
+    threads        4
+    priority       20  nice 0
+    io             3.9 MiB read  7.8 MiB written
+  files      observed
+    FD   TYPE             TARGET
+    0    file             /srv/app/server.py
+    1    pipe             pipe:[123456]
+    2    socket           socket:[654321]
+    3    anon_inode       anon_inode:[eventpoll]
+    4    file             /srv/app/tmp/scratch.log (deleted)
+    5    directory        /srv/app
+    10   file             /var/log/app.log
+  sockets    observed
+    PROTO  LOCAL                  REMOTE                 STATE
+    tcp    127.0.0.1:8080         :0                     LISTEN
+  children   observed
+    ancestors      systemd (1)
+    descendants
+      app-worker (5001) depth 1
+      app-worker (5002) depth 1
+      grandchild (5003) depth 2
+  security   observed
+    uid            1000  euid 1000
+    gid            1000  egid 1000
+    capabilities   0000000000000000
+    no_new_privs   false
+    seccomp        0
+    namespaces     cgroup:[4026531835]  ipc:[4026531839]  mnt:[4026531840]  net:[4026531992]  pid:[4026531836]  time:[4026531834]  user:[4026531837]  uts:[4026531838]
+    cgroup         /system.slice/app.service
+    label          unconfined
+  kernel     observed
+    oom_score      13
+
+SIGNALS
+
+  (none)
+
+ASSESSMENT
+
+  (none)
