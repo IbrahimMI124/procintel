@@ -17,6 +17,10 @@ import (
 //go:embed testdata/inspect_observed.color.golden
 //go:embed testdata/inspect_degraded.txt.golden
 //go:embed testdata/inspect_observed.json.golden
+//go:embed testdata/list_observed.txt.golden
+//go:embed testdata/list_observed.color.golden
+//go:embed testdata/list_degraded.txt.golden
+//go:embed testdata/list.json.golden
 var goldenFS embed.FS
 
 // sgrPattern strips every SGR sequence, and nothing else, so a coloured

@@ -27,9 +27,11 @@ import (
 	"github.com/IbrahimMI124/procintel/internal/render"
 )
 
-// usageLine is the single line printed on any usage or flag error, and as the
-// help text. The subcommand surface is exactly `inspect <pid>` for this block.
-const usageLine = "usage: procintel inspect <pid> [--json] [--verbose] [--no-color] [--root <path>]"
+// usageLine is the block printed on any usage or flag error, and as the help
+// text. The subcommand surface is `inspect <pid>` and `list`; the inspect line
+// is kept verbatim from the block that introduced it.
+const usageLine = "usage: procintel inspect <pid> [--json] [--verbose] [--no-color] [--root <path>]\n" +
+	"       procintel list [--json] [--verbose] [--no-color] [--root <path>]"
 
 func main() {
 	color := isCharDevice(os.Stdout) && os.Getenv("NO_COLOR") == ""
@@ -57,6 +59,8 @@ func run(args []string, stdout, stderr io.Writer, colorDefault bool) int {
 	switch args[0] {
 	case "inspect":
 		return runInspect(args[1:], stdout, stderr, colorDefault)
+	case "list":
+		return runList(args[1:], stdout, stderr, colorDefault)
 	case "-h", "--help":
 		fmt.Fprintln(stdout, usageLine)
 		return 0
@@ -138,6 +142,60 @@ func runInspect(args []string, stdout, stderr io.Writer, colorDefault bool) int 
 	}
 	if werr != nil {
 		fmt.Fprintf(stderr, "inspect: %v\n", werr)
+		return 1
+	}
+	return 0
+}
+
+// runList owns the list flag set and the procfs → render pipeline. It walks
+// the proc root once, renders the flat listing, and returns 0 on success —
+// including an empty or non-observed listing, which is Availability, not an
+// error (AD-4). It returns 1 only for a usage/flag or a render-write error;
+// there is no single-PID abort here, so exit 2 cannot occur.
+func runList(args []string, stdout, stderr io.Writer, colorDefault bool) int {
+	fs := flag.NewFlagSet("list", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	jsonOut := fs.Bool("json", false, "render the listing as JSON")
+	verbose := fs.Bool("verbose", false, "write diagnostics to stderr")
+	noColor := fs.Bool("no-color", false, "disable ANSI colour")
+	root := fs.String("root", "/proc", "procfs root to resolve reads under")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			fmt.Fprintln(stdout, usageLine)
+			return 0
+		}
+		return 1
+	}
+
+	// list takes no positional argument: it enumerates the whole root.
+	if fs.NArg() != 0 {
+		fmt.Fprintln(stderr, usageLine)
+		return 1
+	}
+
+	reader := procfs.New(*root)
+
+	if *verbose {
+		fmt.Fprintf(stderr, "root: %s\n", reader.Root())
+	}
+
+	listing := reader.List()
+
+	if *verbose && listing.Availability != model.AvailabilityObserved {
+		fmt.Fprintf(stderr, "availability: %s\n", listing.Availability)
+	}
+
+	color := colorDefault && !*noColor
+
+	var werr error
+	if *jsonOut {
+		werr = render.JSONList(stdout, listing)
+	} else {
+		werr = render.TextList(stdout, listing, color)
+	}
+	if werr != nil {
+		fmt.Fprintf(stderr, "list: %v\n", werr)
 		return 1
 	}
 	return 0

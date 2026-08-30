@@ -1,0 +1,60 @@
+{
+  "processes": [
+    {
+      "pid": 1,
+      "ppid": 0,
+      "comm": "systemd",
+      "state": "S",
+      "thread_count": 1,
+      "resident_bytes": 8388608,
+      "utime_ticks": 120,
+      "stime_ticks": 340,
+      "start_time": 12
+    },
+    {
+      "pid": 42,
+      "ppid": 1,
+      "comm": "cron",
+      "state": "S",
+      "thread_count": 1,
+      "resident_bytes": 900,
+      "utime_ticks": 3,
+      "stime_ticks": 1,
+      "start_time": 4200
+    },
+    {
+      "pid": 1337,
+      "ppid": 1,
+      "comm": "update",
+      "state": "R",
+      "thread_count": 8,
+      "resident_bytes": 536870912,
+      "utime_ticks": 99999,
+      "stime_ticks": 12345,
+      "start_time": 980412
+    },
+    {
+      "pid": 2001,
+      "ppid": 1337,
+      "comm": "worker (odd)",
+      "state": "D",
+      "thread_count": 4,
+      "resident_bytes": 65536,
+      "utime_ticks": 0,
+      "stime_ticks": 0,
+      "start_time": 981000
+    },
+    {
+      "pid": 4096,
+      "ppid": 2001,
+      "comm": "defunct",
+      "state": "Z",
+      "thread_count": 1,
+      "resident_bytes": 0,
+      "utime_ticks": 5,
+      "stime_ticks": 5,
+      "start_time": 990000
+    }
+  ],
+  "availability": "observed"
+}

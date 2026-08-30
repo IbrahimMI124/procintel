@@ -1,0 +1,7 @@
+PID      PPID     COMM             STATE THREADS RSS         CPU
+1        0        systemd          S     1       200.0 KiB   0.300s
+1234     1        python3          S     4       8.0 MiB     18.010s
+5001     1234     app-worker       S     2       512.0 KiB   1.400s
+5002     1234     app-worker       S     1       512.0 KiB   0.700s
+5003     5001     grandchild       S     1       256.0 KiB   0.150s
+6001     1        confined         S     1       1.0 MiB     0.700s

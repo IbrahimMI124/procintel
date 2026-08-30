@@ -13,6 +13,8 @@ import (
 
 //go:embed testdata/inspect.txt.golden
 //go:embed testdata/inspect.json.golden
+//go:embed testdata/list.txt.golden
+//go:embed testdata/list.json.golden
 var goldenFS embed.FS
 
 // fixtureRoot is internal/procfs/testdata/proc/normal reached from this
@@ -142,7 +144,7 @@ func TestInspectBadPID(t *testing.T) {
 // --- Matrix: unknown / no subcommand -------------------------------
 
 func TestUnknownOrNoSubcommand(t *testing.T) {
-	for _, args := range [][]string{nil, {"bogus"}, {"list"}} {
+	for _, args := range [][]string{nil, {"bogus"}} {
 		code, stdout, stderr := invoke(args, false)
 		if code != 1 {
 			t.Errorf("%v: exit code = %d, want 1", args, code)
@@ -224,12 +226,156 @@ func TestVerboseDiagnostics(t *testing.T) {
 	}
 }
 
+// --- list: happy text --------------------------------------------------
+
+func TestListHappyText(t *testing.T) {
+	code, stdout, stderr := invoke([]string{"list", "--root", fixtureRoot}, false)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if stdout != string(golden(t, "list.txt.golden")) {
+		t.Errorf("stdout mismatch\n--- got ---\n%s", stdout)
+	}
+	if stderr != "" {
+		t.Errorf("stderr not empty: %q", stderr)
+	}
+	if strings.Contains(stdout, "\x1b[") {
+		t.Error("non-TTY text output carries an ANSI escape")
+	}
+	// PID-ascending, with the two stat-less fixture PIDs absent.
+	for _, absent := range []string{"4444", "5100"} {
+		if strings.Contains(stdout, absent) {
+			t.Errorf("listing contains a stat-less PID %s", absent)
+		}
+	}
+	if i, j := strings.Index(stdout, "1234"), strings.Index(stdout, "5001"); i < 0 || j < 0 || i > j {
+		t.Error("rows are not in ascending PID order")
+	}
+}
+
+// --- list: happy JSON ------------------------------------------------
+
+func TestListHappyJSON(t *testing.T) {
+	code, stdout, stderr := invoke([]string{"list", "--json", "--root", fixtureRoot}, false)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if stderr != "" {
+		t.Errorf("stderr not empty: %q", stderr)
+	}
+	var listing model.ProcessListing
+	if err := json.Unmarshal([]byte(stdout), &listing); err != nil {
+		t.Fatalf("stdout is not one model.ProcessListing: %v", err)
+	}
+	if listing.Availability != model.AvailabilityObserved {
+		t.Errorf("Availability = %q, want observed", listing.Availability)
+	}
+	for i := 1; i < len(listing.Processes); i++ {
+		if listing.Processes[i-1].PID >= listing.Processes[i].PID {
+			t.Errorf("processes not PID-ascending at %d", i)
+		}
+	}
+	if stdout != string(golden(t, "list.json.golden")) {
+		t.Errorf("JSON mismatch\n--- got ---\n%s", stdout)
+	}
+}
+
+// --- list: unreadable root is availability, not an error --------------
+
+func TestListUnreadableRootExitsZero(t *testing.T) {
+	code, stdout, stderr := invoke([]string{"list", "--root", "/no/such/proc/root"}, false)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 for a non-observed listing", code)
+	}
+	if !strings.Contains(stdout, "unsupported") && !strings.Contains(stdout, "denied") && !strings.Contains(stdout, "absent") {
+		t.Errorf("stdout does not show a not-observed availability: %q", stdout)
+	}
+	if stderr != "" {
+		t.Errorf("stderr not empty: %q", stderr)
+	}
+}
+
+// --- list: verbose ------------------------------------------------
+
+func TestListVerbose(t *testing.T) {
+	code, stdout, stderr := invoke([]string{"list", "--verbose", "--root", fixtureRoot}, false)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stdout != string(golden(t, "list.txt.golden")) {
+		t.Error("--verbose changed stdout from the plain text golden")
+	}
+	if !strings.Contains(stderr, "root: "+fixtureRoot) {
+		t.Errorf("stderr missing resolved-root line: %q", stderr)
+	}
+	// The fixture root is observed, so no availability line follows.
+	if strings.Contains(stderr, "availability:") {
+		t.Errorf("observed listing still emitted an availability line: %q", stderr)
+	}
+
+	// A non-observed root does carry the availability line.
+	_, _, stderr2 := invoke([]string{"list", "--verbose", "--root", "/no/such/proc/root"}, false)
+	if !strings.Contains(stderr2, "availability:") {
+		t.Errorf("non-observed listing did not emit an availability line: %q", stderr2)
+	}
+}
+
+// --- list: positional arg and unknown flag are usage errors -----------
+
+func TestListRejectsPositionalAndUnknownFlag(t *testing.T) {
+	for _, args := range [][]string{
+		{"list", "1234"},
+		{"list", "foo"},
+		{"list", "--bogus", "--root", fixtureRoot},
+	} {
+		code, stdout, stderr := invoke(args, false)
+		if code != 1 {
+			t.Errorf("%v: exit code = %d, want 1", args, code)
+		}
+		if stdout != "" {
+			t.Errorf("%v: stdout not empty: %q", args, stdout)
+		}
+		if stderr == "" {
+			t.Errorf("%v: no error on stderr", args)
+		}
+	}
+}
+
+// --- list: help goes to stdout -------------------------------------
+
+func TestListHelpGoesToStdout(t *testing.T) {
+	code, stdout, _ := invoke([]string{"list", "-h"}, false)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "usage:") {
+		t.Errorf("help text did not go to stdout: %q", stdout)
+	}
+}
+
+// --- list: --no-color over a colouring default -----------------------
+
+func TestListNoColorOverridesDefault(t *testing.T) {
+	code, stdout, _ := invoke([]string{"list", "--no-color", "--root", fixtureRoot}, true)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if strings.Contains(stdout, "\x1b[") {
+		t.Error("--no-color did not suppress ANSI even though colorDefault was true")
+	}
+	if stdout != string(golden(t, "list.txt.golden")) {
+		t.Error("--no-color output should equal the plain text golden")
+	}
+}
+
 // --- Matrix: determinism -------------------------------------------
 
 func TestRunIsDeterministic(t *testing.T) {
 	for _, args := range [][]string{
 		{"inspect", "1234", "--root", fixtureRoot},
 		{"inspect", "1234", "--json", "--root", fixtureRoot},
+		{"list", "--root", fixtureRoot},
+		{"list", "--json", "--root", fixtureRoot},
 	} {
 		c1, o1, e1 := invoke(args, false)
 		c2, o2, e2 := invoke(args, false)

@@ -1,0 +1,71 @@
+{
+  "processes": [
+    {
+      "pid": 1,
+      "ppid": 0,
+      "comm": "systemd",
+      "state": "S",
+      "thread_count": 1,
+      "resident_bytes": 204800,
+      "utime_ticks": 10,
+      "stime_ticks": 20,
+      "start_time": 100
+    },
+    {
+      "pid": 1234,
+      "ppid": 1,
+      "comm": "python3",
+      "state": "S",
+      "thread_count": 4,
+      "resident_bytes": 8388608,
+      "utime_ticks": 1234,
+      "stime_ticks": 567,
+      "start_time": 987654
+    },
+    {
+      "pid": 5001,
+      "ppid": 1234,
+      "comm": "app-worker",
+      "state": "S",
+      "thread_count": 2,
+      "resident_bytes": 524288,
+      "utime_ticks": 100,
+      "stime_ticks": 40,
+      "start_time": 1000000
+    },
+    {
+      "pid": 5002,
+      "ppid": 1234,
+      "comm": "app-worker",
+      "state": "S",
+      "thread_count": 1,
+      "resident_bytes": 524288,
+      "utime_ticks": 50,
+      "stime_ticks": 20,
+      "start_time": 1000500
+    },
+    {
+      "pid": 5003,
+      "ppid": 5001,
+      "comm": "grandchild",
+      "state": "S",
+      "thread_count": 1,
+      "resident_bytes": 262144,
+      "utime_ticks": 10,
+      "stime_ticks": 5,
+      "start_time": 1001000
+    },
+    {
+      "pid": 6001,
+      "ppid": 1,
+      "comm": "confined",
+      "state": "S",
+      "thread_count": 1,
+      "resident_bytes": 1048576,
+      "utime_ticks": 50,
+      "stime_ticks": 20,
+      "start_time": 3000000
+    }
+  ],
+  "availability": "observed"
+}
