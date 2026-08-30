@@ -2,6 +2,7 @@ package procfs
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/IbrahimMI124/procintel/internal/model"
@@ -19,8 +20,11 @@ import (
 // failure to see something is carried as an Availability on the section it
 // affects: a partial answer is always better than an aborted inspection.
 //
-// Reads are sequential. AD-13's concurrent observation lands with the rest of
-// the observers, once there is more than one file's worth of latency to hide.
+// The observers run concurrently (AD-13): one goroutine each under a
+// sync.WaitGroup, sharing no mutable state — every goroutine writes only its
+// own result and the caller assembles them once Wait returns. The three
+// observers that consume another's output (sockets, lineage, security) run in
+// a second wave after the first joins. No goroutine outlives this call.
 func (r *Reader) Snapshot(pid int) (model.Snapshot, error) {
 	if !r.exists(pid) {
 		return model.Snapshot{}, fmt.Errorf("pid %d under %s: %w", pid, r.root, ErrProcessNotFound)
@@ -32,17 +36,58 @@ func (r *Reader) Snapshot(pid int) (model.Snapshot, error) {
 		CurrentSyscall: -1,
 	}
 
-	statFields, statStatus := r.stat(pid)
-	statusFile, statusStatus := r.status(pid)
-	name, commStatus := r.comm(pid)
-	arguments, cmdlineStatus := r.cmdline(pid)
-	resolved := r.links(pid)
-	counters, ioStatus := r.io(pid)
-	score, oomStatus := r.oomScore(pid)
-	descriptors, filesStatus := r.fileDescriptors(pid)
-	sockets, netStatus := r.sockets(pid, descriptors)
-	ancestors, descendants, childrenStatus := r.lineage(pid, statFields, statStatus)
-	security, securityStatus := r.security(pid, statusFile, statusStatus)
+	var (
+		statFields    statFields
+		statStatus    model.Availability
+		statusFile    statusFile
+		statusStatus  model.Availability
+		name          string
+		commStatus    model.Availability
+		arguments     []string
+		cmdlineStatus model.Availability
+		resolved      processLinks
+		counters      ioCounters
+		ioStatus      model.Availability
+		score         int
+		oomStatus     model.Availability
+		descriptors   []model.FileDescriptor
+		filesStatus   model.Availability
+	)
+
+	var independent sync.WaitGroup
+	independent.Add(8)
+	go func() { defer independent.Done(); statFields, statStatus = r.stat(pid) }()
+	go func() { defer independent.Done(); statusFile, statusStatus = r.status(pid) }()
+	go func() { defer independent.Done(); name, commStatus = r.comm(pid) }()
+	go func() { defer independent.Done(); arguments, cmdlineStatus = r.cmdline(pid) }()
+	go func() { defer independent.Done(); resolved = r.links(pid) }()
+	go func() { defer independent.Done(); counters, ioStatus = r.io(pid) }()
+	go func() { defer independent.Done(); score, oomStatus = r.oomScore(pid) }()
+	go func() { defer independent.Done(); descriptors, filesStatus = r.fileDescriptors(pid) }()
+	independent.Wait()
+
+	var (
+		sockets        []model.Socket
+		netStatus      model.Availability
+		ancestors      []model.ProcessRef
+		descendants    []model.ProcessRef
+		childrenStatus model.Availability
+		security       model.SecurityContext
+		securityStatus model.Availability
+	)
+
+	var dependent sync.WaitGroup
+	dependent.Add(3)
+	go func() { defer dependent.Done(); sockets, netStatus = r.sockets(pid, descriptors) }()
+	go func() {
+		defer dependent.Done()
+		ancestors, descendants, childrenStatus = r.lineage(pid, statFields, statStatus)
+	}()
+	go func() {
+		defer dependent.Done()
+		security, securityStatus = r.security(pid, statusFile, statusStatus)
+	}()
+	dependent.Wait()
 
 	// Identity. comm is the kernel's own short name and the most direct
 	// source; stat's field 2 carries the same string, so it serves when the
