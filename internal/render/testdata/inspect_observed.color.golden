@@ -1,0 +1,53 @@
+PID 7312  update  [S]
+
+[1mFACTS[0m
+
+  identity   [32mobserved[0m
+    pid            7312
+    ppid           1401
+    comm           update
+    command        /tmp/update --quiet
+    executable     /tmp/update
+    cwd            /tmp
+    root           /
+    state          S
+    start_time     980412
+  resources  [32mobserved[0m
+    cpu_time       12.340s user  5.670s system
+    memory         52.0 MiB resident  310.0 MiB virtual
+    threads        4
+    priority       20  nice 0
+    io             88.0 KiB read  4.0 KiB written
+  files      [32mobserved[0m
+    FD   TYPE             TARGET
+    0    character_device /dev/pts/2
+    3    file             /etc/passwd
+    4    socket           socket:[884213]
+    5    file             /tmp/payload (deleted)
+  sockets    [32mobserved[0m
+    PROTO  LOCAL                  REMOTE                 STATE
+    tcp    10.0.0.4:51422         185.10.20.30:443       ESTABLISHED
+    unix   /run/example.sock      -                      LISTEN
+  children   [32mobserved[0m
+    ancestors      nginx (1401)  systemd (1)
+    descendants
+      sh (7401) depth 1
+  security   [32mobserved[0m
+    uid            0  euid 0
+    gid            0  egid 0
+    capabilities   000001ffffffffff
+    no_new_privs   false
+    seccomp        0
+    namespaces     mnt:[4026531840]  net:[4026531992]
+    cgroup         /system.slice/nginx.service
+    label          unconfined
+  kernel     [32mobserved[0m
+    oom_score      17
+
+[1mSIGNALS[0m
+
+  (none)
+
+[1mASSESSMENT[0m
+
+  (none)
